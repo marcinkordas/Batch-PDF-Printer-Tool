@@ -126,6 +126,57 @@ $timer.Interval = 1000 # 1 second
 
 # Assuming initialization of $progressBar and other controls are done above
 
+# $printButton.Add_Click({
+#     $selectedFiles = @()
+#     for ($i = 0; $i -lt $checkedListBox.CheckedItems.Count; $i++) {
+#         $selectedFiles += $checkedListBox.CheckedItems[$i]
+#     }
+#     $folderPath = $pathTextBox.Text
+#     $numberOfCopies = [int]$copiesTextBox.Text
+
+#     $progressBar.Maximum = $selectedFiles.Count * $numberOfCopies
+#     $progressBar.Value = 0
+
+#     # Start background job for printing
+#     $job = Start-Job -ScriptBlock {
+#         param($folderPath, $selectedFiles, $numberOfCopies)
+#         $progress = 0
+#         foreach ($fileName in $selectedFiles) {
+#             $fullPath = Join-Path -Path $folderPath -ChildPath $fileName
+#             for ($copyIndex = 0; $copyIndex -lt $numberOfCopies; $copyIndex++) {
+#                 Start-Process -FilePath $fullPath -Verb Print -PassThru -Wait
+#                 $progress += 1
+#                 # Ideally, update a shared variable or file with $progress
+#             }
+#         }
+#         # Return final progress to indicate job completion
+#         return $progress
+#     } -ArgumentList $folderPath, $selectedFiles, $numberOfCopies
+
+#     $timer = New-Object System.Windows.Forms.Timer
+#     $timer.Interval = 1000 # 1 second
+#     $timer.Add_Tick({
+#         if ($job -ne $null -and $job.Id -ne $null) {
+#             $jobRefresh = Get-Job -Id $job.Id
+#             if ($jobRefresh.State -eq 'Completed') {
+#                 $finalProgress = Receive-Job -Job $jobRefresh
+#                 if ($finalProgress -eq $progressBar.Maximum) {
+#                     $progressBar.Value = $progressBar.Maximum
+#                 }
+#                 $timer.Stop()
+#                 $timer.Dispose()
+#                 Remove-Job -Job $jobRefresh
+#                 # Optionally, notify the user of completion
+#             } else {
+#                 # Increment the progress bar to indicate ongoing activity
+#                 # Note: This does not reflect actual progress, adjust as needed
+#                 $progressBar.Value = [Math]::Min($progressBar.Value + 1, $progressBar.Maximum)
+#             }
+#         }
+#     })
+#     $timer.Start()
+# })
+
 $printButton.Add_Click({
     $selectedFiles = @()
     for ($i = 0; $i -lt $checkedListBox.CheckedItems.Count; $i++) {
@@ -134,61 +185,106 @@ $printButton.Add_Click({
     $folderPath = $pathTextBox.Text
     $numberOfCopies = [int]$copiesTextBox.Text
 
-    $progressBar.Maximum = $selectedFiles.Count * $numberOfCopies
+    # Initialize the progress bar
     $progressBar.Value = 0
+    $progressBar.Maximum = $selectedFiles.Count * $numberOfCopies
 
-    # Start background job for printing
-    $job = Start-Job -ScriptBlock {
-        param($folderPath, $selectedFiles, $numberOfCopies)
-        $progress = 0
-        foreach ($fileName in $selectedFiles) {
-            $fullPath = Join-Path -Path $folderPath -ChildPath $fileName
-            for ($copyIndex = 0; $copyIndex -lt $numberOfCopies; $copyIndex++) {
-                Start-Process -FilePath $fullPath -Verb Print -PassThru -Wait
-                $progress += 1
-                # Ideally, update a shared variable or file with $progress
-            }
+    # Start the background job for printing
+ $job = Start-Job -ScriptBlock {
+    param($folderPath, $selectedFiles, $numberOfCopies)
+    foreach ($fileName in $selectedFiles) {
+        $fullPath = Join-Path -Path $folderPath -ChildPath $fileName
+        for ($copyIndex = 0; $copyIndex -lt $numberOfCopies; $copyIndex++) {
+            Start-Process -FilePath $fullPath -Verb Print -PassThru -Wait
         }
-        # Return final progress to indicate job completion
-        return $progress
-    } -ArgumentList $folderPath, $selectedFiles, $numberOfCopies
+    }
+} -ArgumentList $folderPath, $selectedFiles, $numberOfCopies
 
-    $timer = New-Object System.Windows.Forms.Timer
-    $timer.Interval = 1000 # 1 second
+# Confirm job creation before starting the timer
+if ($job -ne $null) {
+    # $timer = New-Object System.Windows.Forms.Timer
+    # $timer.Interval = 1000 # 1 second
+
     $timer.Add_Tick({
-        if ($job -ne $null -and $job.Id -ne $null) {
+        try {
+            # Attempt to refresh job status
             $jobRefresh = Get-Job -Id $job.Id
             if ($jobRefresh.State -eq 'Completed') {
-                $finalProgress = Receive-Job -Job $jobRefresh
-                if ($finalProgress -eq $progressBar.Maximum) {
-                    $progressBar.Value = $progressBar.Maximum
-                }
                 $timer.Stop()
                 $timer.Dispose()
                 Remove-Job -Job $jobRefresh
-                # Optionally, notify the user of completion
+                $progressBar.Value = $progressBar.Maximum # Indicate completion
             } else {
-                # Increment the progress bar to indicate ongoing activity
-                # Note: This does not reflect actual progress, adjust as needed
+                # Update progress bar to show ongoing activity (if applicable)
                 $progressBar.Value = [Math]::Min($progressBar.Value + 1, $progressBar.Maximum)
             }
+        } catch {
+            # Handle cases where $job.Id might be null or job retrieval fails
+            # Optional: Log error or take alternative action
+            Write-Host "Error retrieving job status: $_"
         }
     })
-    $timer.Start()
+
+    
+}
 })
 
-# Example logic to start the timer, ensuring it's only started after being properly initialized
+# $form.ShowDialog()
+
+#     # Start the background job for printing
+#     $job = Start-Job -ScriptBlock {
+#         param($folderPath, $selectedFiles, $numberOfCopies)
+#         foreach ($fileName in $selectedFiles) {
+#             $fullPath = Join-Path -Path $folderPath -ChildPath $fileName
+#             for ($copyIndex = 0; $copyIndex -lt $numberOfCopies; $copyIndex++) {
+#                 Start-Process -FilePath $fullPath -Verb Print -PassThru -Wait
+#                 # No need for Start-Sleep unless explicitly needed for timing reasons
+#             }
+#         }
+#     } -ArgumentList $folderPath, $selectedFiles, $numberOfCopies
+
+#     # Verify that the job has been successfully created and started
+#     if ($job -ne $null) {
+#         # Initialize and configure the timer only after the job is confirmed to start
+#         $timer = New-Object System.Windows.Forms.Timer
+#         $timer.Interval = 1000 # Update every second
+
+#         $timer.Add_Tick({
+#             $jobRefresh = Get-Job -Id $job.Id
+#             if ($jobRefresh -ne $null -and $jobRefresh.State -eq 'Completed') {
+#                 $timer.Stop()
+#                 $timer.Dispose()
+#                 # Ensure to remove the job to clean up
+#                 Remove-Job -Job $jobRefresh
+#                 # Optionally, update UI to indicate job completion
+#                 $progressBar.Value = $progressBar.Maximum
+#             } else {
+#                 # Optional: Update the progress bar to indicate ongoing activity
+#                 $progressBar.Value = [Math]::Min($progressBar.Value + 1, $progressBar.Maximum)
+#             }
+#         })
+
+#         $timer.Start()
+#     }
+# })
+
+# $form.ShowDialog()
 
 
-#$form.ShowDialog()
-
-# Correct placement of the Print button addition
-# No changes needed here based on your script, but ensure it's added before the first $form.ShowDialog()
+# # Example logic to start the timer, ensuring it's only started after being properly initialized
 
 
+# #$form.ShowDialog()
 
-# Ensure the Print button is added before the form is shown
+# # Correct placement of the Print button addition
+# # No changes needed here based on your script, but ensure it's added before the first $form.ShowDialog()
+
+
+
+# # # Ensure the Print button is added before the form is shown
 $form.Controls.Add($printButton)
 
-# Single call to show the form
+# # # Single call to show the form
 $form.ShowDialog()
+
+ 
